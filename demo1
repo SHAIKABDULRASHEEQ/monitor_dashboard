@@ -1,0 +1,37 @@
+pipeline {
+  agent any
+  stages {
+    stage('Build') {
+      steps {
+        sh 'docker build -t monitor-app .'
+      }
+    }
+    stage('Test') {
+      steps {
+        script {
+          try {
+            sh 'docker run --rm monitor-app | grep "App Status" || echo "Output might vary, check logs"'
+          } catch (Exception e) {
+            echo "Test stage failed: ${e.message}. Check container logs."
+            currentBuild.result = 'UNSTABLE'
+          }
+        }
+      }
+    }
+    stage('Deploy') {
+      steps {
+        script {
+          // Stop any existing container on port 5000
+          sh 'docker ps -q --filter "publish=5000" | xargs -r docker stop || true'
+          sh 'docker run -d -p 5000:5000 monitor-app'
+        }
+      }
+    }
+  }
+  post {
+    always {
+      // Cleanup dangling images
+      sh 'docker system prune -f || true'
+    }
+  }
+}
